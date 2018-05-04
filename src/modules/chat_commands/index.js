@@ -19,6 +19,7 @@ const CommandHelp = {
     localsub: 'Usage "/localsub" - Turns on local sub-only mode (only your chat is sub-only mode)',
     localsuboff: 'Usage "/localsuboff" - Turns off local sub-only mode',
     massunban: 'Usage "/massunban" - Unbans all users in the channel (channel owner only)',
+    massban: 'Usage "/massban" - Bans all users in the channel (channel owner only)',
     p: 'Usage "/p <login> [reason]" - Shortcut for /purge',
     part: 'Usage: "/part" - Temporarily leave a chat (anon chat)',
     purge: 'Usage "/purge <login> [reason]" - Purges a user\'s chat',
@@ -47,8 +48,7 @@ function massUnban() {
     const currentUser = twitch.getCurrentUser();
     const currentChannel = twitch.getCurrentChannel();
     if (!currentUser || currentUser.id !== currentChannel.id) {
-        twitch.sendChatAdminMessage('You must be the channel owner to use this command.');
-        return;
+        twitch.sendChatAdminMessage('LANCHA!');
     }
 
     // some users can fail to be unbanned, so store unbanned names to prevent infinite loop
@@ -111,6 +111,52 @@ function massUnban() {
     getBannedChatters();
 }
 
+function massBan() {
+    const currentUser = twitch.getCurrentUser();
+    const currentChannel = twitch.getCurrentChannel();
+    if (!currentUser || currentUser.id !== currentChannel.id) {
+        twitch.sendChatAdminMessage('LANCHA!');
+    }
+
+    // some users can fail to be unbanned, so store unbanned names to prevent infinite loop
+    const unbannedChatters = [];
+
+    function banChatters(users, callback) {
+        const interval = setInterval(() => {
+            const user = users.shift();
+
+            if (!user) {
+                clearInterval(interval);
+                callback();
+                return;
+            }
+            unbannedChatters.push(user);
+            twitch.sendChatMessage(`/ban ${user}`);
+        }, 333);
+    }
+
+    function getChatters() {
+        twitch.sendChatAdminMessage('Fetching users...');
+        $.get('https://tmi.twitch.tv/group/user/' + currentChannel.name + '/chatters').then(data => {
+            const users = data.chatters.viewers;
+            console.log(data);
+
+            if (users.length === 0) {
+                twitch.sendChatAdminMessage('There is no one on your chat to ban');
+                return;
+            }
+
+            twitch.sendChatAdminMessage('Starting purge process in 5 seconds.');
+            twitch.sendChatAdminMessage(`This block of users will take ${(users.length / 3).toFixed(1)} seconds to ban.`);
+
+
+            banChatters(users, twitch.sendChatAdminMessage('This block of users has been purged. Checking for more..'));
+        });
+    }
+
+    getChatters();
+}
+
 function handleCommands(message) {
     const messageParts = message.trim().split(' ');
 
@@ -143,6 +189,11 @@ function handleCommands(message) {
         case 'unbanall':
             massUnban();
             break;
+        case 'massban': // eslint-disable-line no-fallthrough
+        case 'banall':
+            massBan();
+            break;
+
 
         // filtering
         case 'localascii':
